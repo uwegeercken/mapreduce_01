@@ -54,7 +54,9 @@ public class DataProcessor
 	 */
 	public static class DataMapper extends Mapper<LongWritable, Text, Text, DoubleWritable>
     {
+		// array containing the header fields
 		private static String[] headerFields;
+		// array containing the field types
 		private static String[] headerFieldTypes;
 		
 		/**
@@ -88,17 +90,29 @@ public class DataProcessor
     			}
 			}
     		
+    		// get files from distributed cache
 			URI[] files = context.getCacheFiles();
+			logger.info("found [" + files.length + "] files in distributed cache");
+
+			// indicator if the ruleengine project file was found
+			int found=0;
+			
+			// get the ruleengine project file from the cache
 			final String distributedCacheFilename =	context.getConfiguration().get(DISTCACHE_RULES_PROJECTFILE);
 			for (URI uri: files) 
 			{
 				File file = new File(uri.getPath());
-				logger.info("found file in distributed cache [" + file.getName() + "]");
 				if (file.getName().equals(distributedCacheFilename)) 
 				{
+					logger.info("found file in distributed cache [" + file.getName() + "]");
+					found = 1;
 					initializeRuleEngine(new ZipFile(file.getPath()));
 					break;
 				}
+			}
+			if(found==0)
+			{
+				logger.error("ruleengine project file not found in distributed cache");	
 			}
 		}
 		
