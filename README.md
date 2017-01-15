@@ -11,6 +11,10 @@ The job is an example job to read rows of csv data, filter the data in the mappi
 the ruleengine. If the data passes the business logic, create a key and value and pass it to the
 reduce phase.
 
+In the latest version data from geonames.org is used. Download the allCountries.txt file, if you want
+to run this example mapreduce job. The mapreduce_countries.sh script can be used to run the job, but
+make sure to adjust the path and other information as required in the script.
+
 Instead of filtering data one could also modify the data before it runs through mapreduce.
 Or of course also both: filtering and modifying.
 
