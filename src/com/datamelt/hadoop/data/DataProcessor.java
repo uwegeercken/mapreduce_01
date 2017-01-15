@@ -1,6 +1,8 @@
 package com.datamelt.hadoop.data;
 
 import java.io.File;
+
+import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import java.io.IOException;
 import java.net.URI;
@@ -40,13 +42,15 @@ public class DataProcessor
 {
 	private static Logger logger = Logger.getLogger(DataProcessor.class);
 	
-	public static final String DISTCACHE_RULES_PROJECTFILE	= "rulesprojectfile";
-	public static final String RULEENGINE_LIBRARY 			= "jare0.79.jar";
+	public static final String DISTCACHE_RULES_PROJECTFILE		= "rulesprojectfile";
+	public static final String RULEENGINE_LIBRARY 				= "jare0.79.jar";
+	
+	private static final double DEFAULT_CALCULATIONFIELD_VALUE 	= 1.0;
 	
 	private static BusinessRulesEngine bre;
 	
 	/**
-	 * mapper part to prepare data fro the reduce phase by assigning
+	 * mapper part to prepare data for the reduce phase by assigning
 	 * key and value pairs.
 	 * 
 	 * @author uwe geercken, last update: 2016-11-29
@@ -66,9 +70,12 @@ public class DataProcessor
 		@Override
 		protected void setup(Context context) throws IOException, InterruptedException
 		{
+			// set the log level
+			//DataProcessor.logger.setLevel(Level.DEBUG);
+			
 			// get the definition of the header fields
     		headerFields = DataRecord.getProperty(DataRecord.PROPERTY_HEADERFIELDS).split(",");
-    		logger.info("property file defines [" + headerFields.length + "] header fields");
+    		logger.debug("property file defines [" + headerFields.length + "] header fields");
     		// get the definition of types for each header field
     		
     		// we have as many types as we have fields
@@ -86,13 +93,13 @@ public class DataProcessor
     				logger.error("undefined field type for field [" + headerFields[i] +"] in propertiesfile");
     				// change type to default
     				headerFieldTypes[i] = Splitter.FIELDTYPE_STRING;
-    				logger.info("changed undefined field type for field [" + headerFields[i] +"] to default type [" + Splitter.FIELDTYPE_STRING + "]");
+    				logger.debug("changed undefined field type for field [" + headerFields[i] +"] to default type [" + Splitter.FIELDTYPE_STRING + "]");
     			}
 			}
     		
     		// get files from distributed cache
 			URI[] files = context.getCacheFiles();
-			logger.info("found [" + files.length + "] files in distributed cache");
+			logger.debug("found [" + files.length + "] files in distributed cache");
 
 			// indicator if the ruleengine project file was found
 			int found=0;
@@ -104,7 +111,7 @@ public class DataProcessor
 				File file = new File(uri.getPath());
 				if (file.getName().equals(distributedCacheFilename)) 
 				{
-					logger.info("found file in distributed cache [" + file.getName() + "]");
+					logger.debug("found file in distributed cache [" + file.getName() + "]");
 					found = 1;
 					initializeRuleEngine(new ZipFile(file.getPath()));
 					break;
@@ -124,11 +131,13 @@ public class DataProcessor
 		 */
 		private void initializeRuleEngine(ZipFile file)
 		{
-			logger.info("Initializing JaRE Business Rule Engine v" + BusinessRulesEngine.getVersion() + " with file [" + file.getName() + "]");
+			logger.info("Initializing JaRE Business Rule Engine v" + BusinessRulesEngine.getVersion() + " with project file [" + file.getName() + "]");
 			try
 			{
 				bre = new BusinessRulesEngine(file);
-				//bre.setPreserveRuleExcecutionResults(false);
+				// set preserve execution results to fast, so that the details of the ruleengine
+				// results will NOT be stored (for performance reasons and they are not required here)
+				bre.setPreserveRuleExcecutionResults(false);
 			}
 			catch(Exception ex)
 			{
@@ -158,17 +167,42 @@ public class DataProcessor
     	    	// if the run of the rule engine has no groups which failed, write key and value to the context
     	    	if(bre.getNumberOfGroupsFailed()==0)
     	    	{
-    	    		// get the field that contains the value for calculations
-    	    		RowField valueField = collection.getField(DataRecord.getProperty(DataRecord.PROPERTY_CALCULATIONFIELD));
+    	    		// defines a field of the data row
+    	    		RowField valueField = null;
+    	    		try
+    	    		{
+    	    			// get the field that contains the value for calculations
+    	    			valueField = collection.getField(DataRecord.getProperty(DataRecord.PROPERTY_CALCULATIONFIELD));
+    	    		}
+    	    		catch(Exception ex)
+    	    		{
+    	    			// value field was not found
+    	        		logger.debug("calculation field undefined in properties file");
+    	    		}
     	    		
     	    		// if no keyfields have been defined, use the key defined by the map process
     	    		String rowKey = DataRecord.getKey(collection);
-    	    		if(rowKey.equals(""))
+    	    		if(rowKey==null || rowKey.equals(""))
     	    		{
+    	        		logger.debug("keyfields undefined in properties file");
     	    			rowKey = key.toString();
     	    		}
-    	    		// get the constructed key and value for the current row of data
-    	    		context.write(new Text(rowKey), new DoubleWritable((Double)valueField.getValue()));
+    	    		
+            		logger.debug("row field collection for key [" + rowKey + "] consists of [" + collection.getNumberOfFields() + "] fields");
+            		
+    	    		// if no value field is defined, then simply count the data record as one (1)
+    	    		if(valueField==null)
+    	    		{
+    	    			// get the constructed key and value for the current row of data
+        	    		context.write(new Text(rowKey), new DoubleWritable(DEFAULT_CALCULATIONFIELD_VALUE));
+        	    		logger.debug("map: writing to context: key=[" + rowKey + "], value=[" + DEFAULT_CALCULATIONFIELD_VALUE +"]");
+    	    		}
+    	    		else
+    	    		{
+    	    			// get the constructed key and value for the current row of data
+        	    		context.write(new Text(rowKey), new DoubleWritable((Double)valueField.getValue()));
+        	    		logger.debug("map: writing to context: key=[" + rowKey + "], value=[" + valueField.getValue() + "]");
+    	    		}
     	    	}
     	    	
     	    	// clear the results of the ruleengine execution before the next data arrives
@@ -202,15 +236,20 @@ public class DataProcessor
             {
             	sum += value.get();
             }
+            
+            logger.debug("reduce: writing to context: key=[" + key + "], value=[" + sum +"]");
+            
             // write to the context as key and double
             context.write(key, new DoubleWritable(sum));
         }
     }
     
+    
     public static void main(String[] args) throws Exception
     {
-        Configuration conf = new Configuration();
-        conf.set("mapreduce.output.textoutputformat.separator", ";");
+    	Configuration conf = new Configuration();
+        // set the output separator
+    	conf.set("mapreduce.output.textoutputformat.separator", ";");
         
         Job job = Job.getInstance(conf, "data processor");
         

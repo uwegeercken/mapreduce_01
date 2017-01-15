@@ -102,7 +102,7 @@ public class DataRecord
 		}
 		catch(Exception ex)
 		{
-			logger.error("error initializing EpxRecord class from static block");
+			logger.error("error initializing DataRecord class from static block");
 		}
 	}
 		
@@ -128,11 +128,11 @@ public class DataRecord
 					// if the field is of type date, then format it with the default format
 					if(fieldValue instanceof Date)
 					{
-						key.append(sdf.format(fieldValue));
+						key.append(sdf.format(fieldValue.toString().trim()));
 					}
 					else
 					{
-						key.append(fieldValue);
+						key.append(fieldValue.toString().trim());
 					}
 					if(i<keyFieldIndexes.length-1)
 					{
@@ -167,7 +167,7 @@ public class DataRecord
 		{
 			try
 			{
-				logger.info("loading DataRecord properties from file [" + PROPERTY_FILENAME +"]");
+				logger.debug("loading DataRecord properties from file [" + PROPERTY_FILENAME +"]");
 				properties.load(inputStream);
 			}
 			catch(Exception ex)
@@ -218,11 +218,11 @@ public class DataRecord
 	}
 	
 	/**
-	 * find the number that corresponds to the field specified
+	 * find the number/index that corresponds to the field specified
 	 * by its name
 	 * 
 	 * @param fieldName
-	 * @return
+	 * @return the index of the field
 	 */
 	private static int findFieldIndexByFieldName(String fieldName)
 	{
@@ -241,5 +241,4 @@ public class DataRecord
 		}
 		return index;
 	}
-
 }
