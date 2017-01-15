@@ -17,4 +17,4 @@ Or of course also both: filtering and modifying.
 The key for the mapping phase can be built from multiple fields/columns from the incoming data
 row and is defined in a properties file. The field/column to use for the value as well.
 
-last update: uwe geercken 2016-12-01
+last update: uwe geercken 2017-01-15
